@@ -50,6 +50,7 @@ type linkAccountRequest struct {
 type accountResponse struct {
 	ID            uuid.UUID       `json:"id"`
 	Provider      models.Provider `json:"provider"`
+	AccountID     string          `json:"accountId"`
 	AccountNumber string          `json:"accountNumber"`
 	AccountTitle  string          `json:"accountTitle"`
 	AccountType   string          `json:"accountType"`
@@ -120,10 +121,12 @@ func (h *LinkedAccountHandler) LinkAccount(c *gin.Context) {
 
 	log.Printf("[LINK-ACCOUNT] Successfully got UUID: %s", userID)
 
-	// Check if account already exists
+	// Check if account already exists (excluding soft-deleted records)
 	var existingAccount models.LinkedAccount
-	err := h.db.Where("user_id = ? AND provider = ? AND account_number = ?",
-		userID, req.Provider, req.AccountNumber).First(&existingAccount).Error
+	err := h.db.Unscoped().
+		Where("user_id = ? AND provider = ? AND account_number = ? AND deleted_at IS NULL",
+			userID, req.Provider, req.AccountNumber).
+		First(&existingAccount).Error
 	if err == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{
 			"code":    "ACCOUNT_ALREADY_LINKED",
@@ -132,7 +135,40 @@ func (h *LinkedAccountHandler) LinkAccount(c *gin.Context) {
 		return
 	}
 
-	// Create new linked account
+	// If we found a soft-deleted account, we can reactivate it
+	err = h.db.Unscoped().
+		Where("user_id = ? AND provider = ? AND account_number = ? AND deleted_at IS NOT NULL",
+			userID, req.Provider, req.AccountNumber).
+		First(&existingAccount).Error
+	if err == nil {
+		// Reactivate the account with new details
+		existingAccount.DeletedAt = gorm.DeletedAt{}
+		existingAccount.AccountID = req.AccountID
+		existingAccount.AccountTitle = req.AccountTitle
+		existingAccount.AccountType = req.AccountType
+		existingAccount.CurrencyCode = req.Currency.Code
+		existingAccount.CurrencyName = req.Currency.Name
+		existingAccount.CurrencySymbol = req.Currency.Symbol
+		existingAccount.IsDefaultAccount = req.IsDefaultAccount
+		existingAccount.ProviderUsername = req.Credentials.Username
+		existingAccount.ProviderPassword = req.Credentials.Password
+		existingAccount.DeviceID = req.DeviceInfo.DeviceID
+
+		if err := h.db.Unscoped().Save(&existingAccount).Error; err != nil {
+			log.Printf("[LINK-ACCOUNT] Failed to reactivate account: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{
+				"code":    "INTERNAL_ERROR",
+				"message": "Failed to link account",
+			}})
+			return
+		}
+
+		log.Printf("[LINK-ACCOUNT] Successfully reactivated account for user %s", userID)
+		c.JSON(http.StatusCreated, h.toAccountResponse(&existingAccount))
+		return
+	}
+
+	// Create new linked account if no existing account found
 	account := models.LinkedAccount{
 		UserID:           userID,
 		Provider:         req.Provider,
@@ -484,6 +520,7 @@ func (h *LinkedAccountHandler) toAccountResponse(account *models.LinkedAccount) 
 	response := &accountResponse{
 		ID:               account.ID,
 		Provider:         account.Provider,
+		AccountID:        account.AccountID,
 		AccountNumber:    account.AccountNumber,
 		AccountTitle:     account.AccountTitle,
 		AccountType:      account.AccountType,
