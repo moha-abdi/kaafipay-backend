@@ -1,0 +1,35 @@
+[Unit]
+Description=KaafiPay WhatsApp Session Monitor
+After=network.target
+
+[Service]
+Type=simple
+User=kaafipay
+WorkingDirectory=/path/to/kaafipay-backend
+Environment=ADMIN_TOKEN=your-secure-token
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/kaafipay/.Xauthority
+
+ExecStartPre=/bin/bash -c '\
+    response=$(/path/to/kaafipay-backend/scripts/manage_whatsapp.sh get "${WHATSAPP_SESSION_ID}"); \
+    if [[ "$response" == *"error"* ]] || [[ "$response" == *"DISCONNECTED"* ]]; then \
+        echo "No active session found. Creating new session..."; \
+        /path/to/kaafipay-backend/scripts/manage_whatsapp.sh add "${WHATSAPP_SESSION_ID}"; \
+    fi'
+
+ExecStart=/bin/bash -c 'while true; do \
+    response=$(/path/to/kaafipay-backend/scripts/manage_whatsapp.sh get "${WHATSAPP_SESSION_ID}"); \
+    status=$(echo "$response" | jq -r ".status // empty"); \
+    if [[ "$status" != "CONNECTED" ]]; then \
+        echo "Session disconnected or error detected (status: $status), recreating session..."; \
+        /path/to/kaafipay-backend/scripts/manage_whatsapp.sh delete "${WHATSAPP_SESSION_ID}"; \
+        /path/to/kaafipay-backend/scripts/manage_whatsapp.sh add "${WHATSAPP_SESSION_ID}"; \
+    fi; \
+    sleep 300; \
+done'
+
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target 
