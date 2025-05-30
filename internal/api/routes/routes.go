@@ -32,6 +32,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	authHandler := handlers.NewAuthHandler(cfg, userRepo)
 	verifyHandler := handlers.NewVerifyHandler(whatsappProvider)
 	linkedAccountHandler := handlers.NewLinkedAccountHandler(db)
+	budgetHandler := handlers.NewBudgetCategoryHandler(db)
 
 	// Public routes
 	v1 := router.Group("/api/v1")
@@ -49,18 +50,28 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 			verify.POST("/verify-token", verifyHandler.VerifyToken)
 		}
 
-		// Linked accounts routes
-		accounts := v1.Group("/linked-accounts")
+		// Protected routes
+		protected := v1.Group("")
+		protected.Use(middleware.AuthMiddleware(cfg))
 		{
-			// Protected routes
-			protected := accounts.Use(middleware.AuthMiddleware(cfg))
+			// Linked accounts routes
+			accounts := protected.Group("/linked-accounts")
 			{
-				protected.POST("", linkedAccountHandler.LinkAccount)
-				protected.GET("", linkedAccountHandler.GetLinkedAccounts)
-				protected.GET("/:id", linkedAccountHandler.GetLinkedAccount)
-				protected.DELETE("/:id", linkedAccountHandler.UnlinkAccount)
-				protected.PATCH("/:id/default", linkedAccountHandler.SetDefaultAccount)
-				protected.POST("/:id/refresh", linkedAccountHandler.RefreshAccount)
+				accounts.POST("", linkedAccountHandler.LinkAccount)
+				accounts.GET("", linkedAccountHandler.GetLinkedAccounts)
+				accounts.GET("/:id", linkedAccountHandler.GetLinkedAccount)
+				accounts.DELETE("/:id", linkedAccountHandler.UnlinkAccount)
+				accounts.PATCH("/:id/default", linkedAccountHandler.SetDefaultAccount)
+				accounts.POST("/:id/refresh", linkedAccountHandler.RefreshAccount)
+			}
+
+			// Budget categories routes
+			budgets := protected.Group("/budget-categories")
+			{
+				budgets.GET("", budgetHandler.GetBudgetCategories)
+				budgets.POST("", budgetHandler.CreateBudgetCategory)
+				budgets.PUT("/:id", budgetHandler.UpdateBudgetCategory)
+				budgets.DELETE("/:id", budgetHandler.DeleteBudgetCategory)
 			}
 		}
 
