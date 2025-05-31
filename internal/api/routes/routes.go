@@ -33,6 +33,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	verifyHandler := handlers.NewVerifyHandler(whatsappProvider)
 	linkedAccountHandler := handlers.NewLinkedAccountHandler(db)
 	budgetHandler := handlers.NewBudgetCategoryHandler(db)
+	userHandler := handlers.NewUserHandler(userRepo)
 
 	// Public routes
 	v1 := router.Group("/api/v1")
@@ -54,6 +55,14 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 		protected := v1.Group("")
 		protected.Use(middleware.AuthMiddleware(cfg))
 		{
+			// User profile routes
+			user := protected.Group("/user")
+			{
+				user.GET("/profile", userHandler.GetProfile)
+				user.PUT("/profile", userHandler.UpdateProfile)
+				user.PUT("/password", userHandler.ChangePassword)
+			}
+
 			// Linked accounts routes
 			accounts := protected.Group("/linked-accounts")
 			{

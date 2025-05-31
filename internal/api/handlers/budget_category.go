@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/moha/kaafipay-backend/internal/models"
+	"github.com/moha/kaafipay-backend/internal/utils"
 )
 
 var (
@@ -28,7 +29,7 @@ func NewBudgetCategoryHandler(db *gorm.DB) *BudgetCategoryHandler {
 
 // GetBudgetCategories returns all budget categories for a user
 func (h *BudgetCategoryHandler) GetBudgetCategories(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
+	userID, err := utils.GetUserIDFromContext(c)
 	if err != nil {
 		return
 	}
@@ -48,7 +49,7 @@ func (h *BudgetCategoryHandler) GetBudgetCategories(c *gin.Context) {
 
 // CreateBudgetCategory creates a new budget category
 func (h *BudgetCategoryHandler) CreateBudgetCategory(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
+	userID, err := utils.GetUserIDFromContext(c)
 	if err != nil {
 		log.Printf("[CREATE-BUDGET-CATEGORY] Failed to get user ID from context: %v", err)
 		return
@@ -107,7 +108,7 @@ func (h *BudgetCategoryHandler) CreateBudgetCategory(c *gin.Context) {
 
 // UpdateBudgetCategory updates an existing budget category
 func (h *BudgetCategoryHandler) UpdateBudgetCategory(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
+	userID, err := utils.GetUserIDFromContext(c)
 	if err != nil {
 		return
 	}
@@ -192,7 +193,7 @@ func (h *BudgetCategoryHandler) UpdateBudgetCategory(c *gin.Context) {
 
 // DeleteBudgetCategory deletes a budget category
 func (h *BudgetCategoryHandler) DeleteBudgetCategory(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
+	userID, err := utils.GetUserIDFromContext(c)
 	if err != nil {
 		return
 	}
@@ -225,41 +226,4 @@ func (h *BudgetCategoryHandler) DeleteBudgetCategory(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
-}
-
-// Helper function to get user ID from context
-func getUserIDFromContext(c *gin.Context) (uuid.UUID, error) {
-	userIDInterface, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{
-			"code":    "UNAUTHORIZED",
-			"message": "User ID not found in context",
-		}})
-		return uuid.Nil, ErrUnauthorized
-	}
-
-	// Try to get UUID directly
-	userID, ok := userIDInterface.(uuid.UUID)
-	if !ok {
-		// If not UUID, try string conversion as fallback
-		if userIDStr, isStr := userIDInterface.(string); isStr {
-			var err error
-			userID, err = uuid.Parse(userIDStr)
-			if err != nil {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{
-					"code":    "UNAUTHORIZED",
-					"message": "Invalid user ID format",
-				}})
-				return uuid.Nil, ErrUnauthorized
-			}
-		} else {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{
-				"code":    "UNAUTHORIZED",
-				"message": "Invalid user ID format",
-			}})
-			return uuid.Nil, ErrUnauthorized
-		}
-	}
-
-	return userID, nil
 }
